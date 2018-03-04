@@ -1,6 +1,6 @@
 import * as React from "react";
 
-const workingTasks = new Map();
+const workingTasks = new WeakMap();
 
 const getDate = () => {
   const date = new Date();
