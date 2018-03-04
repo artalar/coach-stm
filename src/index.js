@@ -12,8 +12,8 @@ const defaultMiddleware = [
     beforeGoalStart({ name }) {
       console.groupCollapsed(`Goal ${name}`);
     },
-    beforeTaskStart({ index, state }) {
-      console.log(`Task #${index} start at ${getDate()}`, { state });
+    beforeTaskStart({ index, payload, state }) {
+      console.log(`Task #${index} start at ${getDate()}`, { state, payload });
     },
     afterTaskEnd({ index, state }) {
       console.log(`Task #${index} end at ${getDate()}`, { state });
@@ -22,79 +22,111 @@ const defaultMiddleware = [
       console.log(`Goal ${name} complete at ${getDate()}`);
       console.groupEnd();
     },
-    goalCatchError({ name }) {
-      console.error(`Goal ${name} rejected by race condition`);
+    goalCatchError({ name, error }) {
+      console.error(`Goal ${name} catch error`, error);
       console.groupEnd();
     }
   }
 ];
 
-async function executor(name, tasks, middleware, payload) {
+async function executor(name, tasks, errorHandler, payload) {
   const processId = Symbol();
+  const tasksCount = tasks.length - 1;
   let taskIndex = 0;
   let result = payload;
+  let loops = 0;
 
   workingTasks.set(tasks, processId);
 
-  middleware.forEach(({ beforeGoalStart }) =>
+  this.middleware.forEach(({ beforeGoalStart }) =>
     beforeGoalStart({ name, payload, state: this.state })
   );
 
-  try {
-    for (; taskIndex < tasks.length; taskIndex++) {
+  while (taskIndex <= tasksCount) {
+    try {
       // escape race condition
       if (workingTasks.get(tasks) !== processId) {
-        throw new Error(`Goal ${name} rejected by race condition`);
+        const error = new Error("rejected by race condition");
+        error.rejectedByRaceCondition = true;
+        throw error;
       }
 
-      middleware.forEach(({ beforeTaskStart }) =>
+      this.middleware.forEach(({ beforeTaskStart }) =>
         beforeTaskStart({
+          index: taskIndex,
+          state: this.state,
           name,
           payload,
-          state: this.state,
-          result,
-          index: taskIndex
+          result
         })
       );
 
       result = await tasks[taskIndex](result);
 
-      middleware.forEach(({ afterTaskEnd }) =>
+      this.middleware.forEach(({ afterTaskEnd }) =>
         afterTaskEnd({
+          index: taskIndex,
+          state: this.state,
           name,
           payload,
-          state: this.state,
-          result,
-          index: taskIndex
+          result
         })
       );
+
+      taskIndex++;
+    } catch (error) {
+      const log = () =>
+        this.middleware.forEach(({ goalCatchError }) =>
+          goalCatchError({
+            index: taskIndex,
+            state: this.state,
+            name,
+            payload,
+            result,
+            error
+          })
+        );
+
+      if (error.rejectedByRaceCondition) {
+        log();
+        throw error;
+      }
+
+      const newTaskIndex = errorHandler(error, taskIndex);
+      if (newTaskIndex === undefined || newTaskIndex > tasksCount) {
+        log();
+        throw error;
+      }
+      if (newTaskIndex === taskIndex && this.maxLoop < ++loops) {
+        log();
+        throw new Error(`to many loops`);
+      }
+
+      // continue with renew taskIndex;
+      taskIndex = newTaskIndex;
     }
-  } catch (error) {
-    middleware.forEach(({ goalCatchError }) =>
-      goalCatchError({
-        name,
-        payload,
-        state: this.state,
-        result,
-        index: taskIndex
-      })
-    );
-    return error;
   }
-  middleware.forEach(({ afterGoalEnd }) =>
+
+  this.middleware.forEach(({ afterGoalEnd }) =>
     afterGoalEnd({
+      index: taskIndex,
+      state: this.state,
       name,
       payload,
-      state: this.state,
-      result,
-      index: taskIndex
+      result
     })
   );
   return result;
 }
 
 export class Coach extends React.Component {
-  defaultMiddleware = defaultMiddleware;
+  middleware = defaultMiddleware;
+
+  maxLoop = 5;
+
+  isRejectedByRaceCondition(error) {
+    return error.rejectedByRaceCondition;
+  }
 
   // wait state update for continue
   async setWaitState(updater) {
@@ -103,18 +135,17 @@ export class Coach extends React.Component {
     );
   }
 
-  goal(...args) {
-    let name = "",
-      tasks = [],
-      middleware = defaultMiddleware;
-    if (typeof args[0] === "string") {
-      name = args[0];
-      tasks = args[1] || tasks;
-      middleware = args[2] || middleware;
-    } else {
-      tasks = args[0] || tasks;
-      middleware = args[1] || middleware;
-    }
-    return payload => executor.bind(this)(name, tasks, middleware, payload);
+  goal(name, tasks = [], errorHandler = () => tasks.length) {
+    const newGoal = payload =>
+      executor.bind(this)(
+        name ? `"${name}"` : "",
+        tasks,
+        errorHandler,
+        payload
+      );
+
+    newGoal.tasks = tasks;
+
+    return newGoal;
   }
 }
