@@ -16,6 +16,7 @@ yarn add coach-stm
 * Consider all associated data-driven functions and methods in one simple and predictable place.
 * Don`t worry about race condition
 * Wish to simple and familiar state manager with deep debugging accessibility
+* Inspiration from new React.Context API
 
 Think about your usual case - you need to send user input from one place to another. So you create action and it must be simple, but you face difficulties like: normalize and verify data, branching to conditions, awaiting side effects and many other... And now the input from user ~~mutate~~ transforms into many slices of your code and it's really hard to debug.
 
@@ -26,7 +27,7 @@ With **_Coach_** - extremely simple state manager extended from _React.Component
 
 Every task may be synchronously or asynchronously (promisify), how all the goal. So you can combine goals if needed! If you need to break up the chain of tasks, just `throw` it, the goal wrap it and save your application (as well as some unexpected error).
 
-In redux you can log and debug only state changes. It's awful! With Coach middleware, you can perfectly control and debug every step of your tasks. It's on by default ;) But you can write and adds your own middleware.
+In redux you can log and debug only state changes. It's awful! With Coach middleware, you can perfectly control and debug EVERY step of your tasks. It's on by default ;) But you can write and adds your own middleware.
 
 > ### TODO
 > * add real world example
@@ -34,6 +35,7 @@ In redux you can log and debug only state changes. It's awful! With Coach middle
 > * create the connector, basic on reselect
 > * rewrite middleware
 > * complement documentation
+> * add Flow types (and TS \ just JSDoc?)
 
 ### API example
 
