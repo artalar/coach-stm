@@ -39,50 +39,23 @@ In redux you can log and debug only state changes. It's awful! With Coach middle
 
 ### API example
 
-[![Counter](https://codesandbox.io/static/img/play-codesandbox.svg)](https://codesandbox.io/s/ykk9xoq87v)
+[![Demo](https://codesandbox.io/static/img/play-codesandbox.svg)](https://codesandbox.io/s/ykk9xoq87v)
 
 ```javascript
-import { Coach } from "./coach-stm";
+class Items extends Coach {
+  state = { list: [] };
 
-const sleep = async (ms = 16) =>
-  new Promise(resolve => setTimeout(() => resolve(), ms));
-
-export class Counter extends Coach {
-  state = {
-    fetching: false,
-    count: 0
-  };
-
-  fetchLens = status => payload => {
-    this.setState(state => ({ fetching: status }));
-    return payload;
-  };
-
-  countSelector = payload => ({ payload, count: this.state.count });
-
-  countSetter = count => this.setWaitState(state => ({ count }));
-
-  logic1 = ({ count, payload }) => count + payload;
-
-  logic2 = async payload => {
-    // do sum stuff
-    await sleep(1000);
-    return payload;
-  };
-
-  changeCount = this.goal("change count", [
-    this.fetchLens(true),
-    this.countSelector,
-    this.logic1,
-    this.logic2,
-    this.fetchLens(false),
-    this.countSetter
-  ]);
-
-  handleChange = dif => async () => {
-    await this.changeCount(dif);
-    // another goal?
-  };
-
-//......
+  fetchItems = this.goal(
+    // first argument - any explanation comment
+    "fetch important items",
+    // second argument - an array of sequential tasks
+    [ paramsSelector,
+      paramsValidator,
+      paramsConvertor,
+      api.getItems,
+      paramsSetter    ],
+    // the third optional argument is an error handler
+    error => this.state(() => ({ error: error.message }))
+  )
+}
 ```
