@@ -1,5 +1,7 @@
 import * as React from "react";
 
+const compose = (f, x) => (payload, options) => x(payload, options, f);
+
 const workingTasks = new WeakMap();
 
 const getDate = () => {
@@ -7,40 +9,24 @@ const getDate = () => {
   return `${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}:${date.getMilliseconds()}`;
 };
 
-const defaultMiddleware = [
-  {
-    beforeGoalStart({ name }) {
-      console.groupCollapsed(`Goal ${name}`);
-    },
-    beforeTaskStart({ index, payload, state }) {
-      console.log(`Task #${index} start at ${getDate()}`, { state, payload });
-    },
-    afterTaskEnd({ index, state }) {
-      console.log(`Task #${index} end at ${getDate()}`, { state });
-    },
-    afterGoalEnd({ name }) {
-      console.log(`Goal ${name} complete at ${getDate()}`);
-      console.groupEnd();
-    },
-    goalCatchError({ name, error }) {
-      console.error(`Goal ${name} catch error`, error);
-      console.groupEnd();
-    }
-  }
-];
+const logger = (payload, options, task) => {
+  const { name, taskIndex, tasksCount } = options;
+  if (taskIndex === 0) console.groupCollapsed(`Goal ${name}`);
+  console.log(`Task #${taskIndex} start at ${getDate()}`, options);
+  payload = task(payload, options);
+  console.log(`Task #${taskIndex} end at ${getDate()}`, options);
+  if (taskIndex === tasksCount) console.groupEnd();
+  return payload;
+};
 
-async function executor(name, tasks, errorHandler, payload) {
+async function executor(name, tasks, errorHandler, initialPayload) {
   const processId = Symbol();
   const tasksCount = tasks.length - 1;
   let taskIndex = 0;
-  let result = payload;
+  let result = initialPayload;
   let loops = 0;
 
   workingTasks.set(tasks, processId);
-
-  this.middleware.forEach(({ beforeGoalStart }) =>
-    beforeGoalStart({ name, payload, state: this.state })
-  );
 
   while (taskIndex <= tasksCount) {
     try {
@@ -51,41 +37,26 @@ async function executor(name, tasks, errorHandler, payload) {
         throw error;
       }
 
-      this.middleware.forEach(({ beforeTaskStart }) =>
-        beforeTaskStart({
-          index: taskIndex,
-          state: this.state,
-          name,
-          payload,
-          result
-        })
-      );
-
-      result = await tasks[taskIndex](result);
-
-      this.middleware.forEach(({ afterTaskEnd }) =>
-        afterTaskEnd({
-          index: taskIndex,
-          state: this.state,
-          name,
-          payload,
-          result
-        })
-      );
+      result = await tasks[taskIndex](result, {
+        state: this.state,
+        initialPayload,
+        name,
+        taskIndex,
+        tasksCount
+      });
 
       taskIndex++;
     } catch (error) {
-      const log = () =>
-        this.middleware.forEach(({ goalCatchError }) =>
-          goalCatchError({
-            index: taskIndex,
-            state: this.state,
-            name,
-            payload,
-            result,
-            error
-          })
-        );
+      const log = () => {
+        console.error(`Task #${taskIndex} FILED at ${getDate()}`, {
+          state: this.state,
+          initialPayload,
+          name,
+          taskIndex,
+          tasksCount
+        });
+        console.groupEnd();
+      };
 
       if (error.rejectedByRaceCondition) {
         log();
@@ -107,20 +78,11 @@ async function executor(name, tasks, errorHandler, payload) {
     }
   }
 
-  this.middleware.forEach(({ afterGoalEnd }) =>
-    afterGoalEnd({
-      index: taskIndex,
-      state: this.state,
-      name,
-      payload,
-      result
-    })
-  );
   return result;
 }
 
 export class Coach extends React.Component {
-  middleware = defaultMiddleware;
+  decorators = [logger];
 
   maxLoop = 5;
 
@@ -136,15 +98,21 @@ export class Coach extends React.Component {
   }
 
   goal(name, tasks = [], errorHandler = () => tasks.length) {
+    const decoratedTasks = tasks.map(task =>
+      this.decorators.reduce(
+        (acc, decorator) => compose(task, decorator),
+        f => f
+      )
+    );
     const newGoal = payload =>
       executor.bind(this)(
         name ? `"${name}"` : "",
-        tasks,
+        decoratedTasks,
         errorHandler,
         payload
       );
 
-    newGoal.tasks = tasks;
+    newGoal.tasks = decoratedTasks;
 
     return newGoal;
   }
