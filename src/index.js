@@ -24,7 +24,10 @@ async function executor(name, tasks, errorHandler, initialPayload) {
   const processId = Symbol();
   const tasksCount = tasks.length - 1;
   let taskIndex = 0;
-  let result = initialPayload;
+  // accumulate payload for case when taskIndex changed by throw
+  // and we need call previous Task with old payload
+
+  const payload = [initialPayload];
   let loops = 0;
 
   workingTasks.set(tasks, processId);
@@ -38,7 +41,7 @@ async function executor(name, tasks, errorHandler, initialPayload) {
         throw error;
       }
 
-      result = await tasks[taskIndex](result, {
+      payload[taskIndex + 1] = await tasks[taskIndex](payload[taskIndex], {
         state: this.state,
         initialPayload,
         name,
@@ -79,7 +82,8 @@ async function executor(name, tasks, errorHandler, initialPayload) {
     }
   }
 
-  return result;
+  // `- 1` because in end of while tick we do `taskIndex++;`
+  return payload[taskIndex - 1];
 }
 
 export class Coach extends React.Component {
