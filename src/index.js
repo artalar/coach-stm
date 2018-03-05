@@ -1,6 +1,7 @@
 import * as React from "react";
 
-const compose = (f, x) => (payload, options) => x(payload, options, f);
+const compose = (decorator, task) => (payload, options) =>
+  decorator(payload, options, task);
 
 const workingTasks = new WeakMap();
 
@@ -9,11 +10,11 @@ const getDate = () => {
   return `${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}:${date.getMilliseconds()}`;
 };
 
-const logger = (payload, options, task) => {
+const logger = async (payload, options, task) => {
   const { name, taskIndex, tasksCount } = options;
   if (taskIndex === 0) console.groupCollapsed(`Goal ${name}`);
   console.log(`Task #${taskIndex} start at ${getDate()}`, options);
-  payload = task(payload, options);
+  payload = await task(payload, options);
   console.log(`Task #${taskIndex} end at ${getDate()}`, options);
   if (taskIndex === tasksCount) console.groupEnd();
   return payload;
@@ -99,9 +100,9 @@ export class Coach extends React.Component {
 
   goal(name, tasks = [], errorHandler = () => tasks.length) {
     const decoratedTasks = tasks.map(task =>
-      this.decorators.reduce(
-        (acc, decorator) => compose(task, decorator),
-        f => f
+      this.decorators.reduceRight(
+        (acc, decorator) => compose(decorator, acc),
+        task
       )
     );
     const newGoal = payload =>
