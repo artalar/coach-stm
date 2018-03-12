@@ -1,124 +1,110 @@
-import * as React from "react";
-
-const compose = (decorator, task) => (payload, options) =>
-  decorator(payload, options, task);
-
-const workingTasks = new WeakMap();
+/******************
+ *** MIDDLEWARE ***
+ ******************/
 
 const getDate = () => {
   const date = new Date();
   return `${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}:${date.getMilliseconds()}`;
 };
 
-const logger = async (payload, options, task) => {
-  const { name, taskIndex, tasksCount } = options;
-  if (taskIndex === 0) console.groupCollapsed(`Goal ${name}`);
-  console.log(`Task #${taskIndex} start at ${getDate()}`, options);
-  payload = await task(payload, options);
-  console.log(`Task #${taskIndex} end at ${getDate()}`, options);
-  if (taskIndex === tasksCount) console.groupEnd();
+export const logger = async (payload, meta, task) => {
+  const { description, taskIndex, tasksCount } = meta;
+  if (taskIndex === 0) {
+    console.groupCollapsed(`Goal ${description ? `"${description}"` : ""}`);
+  }
+  console.log(`Task #${taskIndex} start at ${getDate()}`, { payload, meta });
+  try {
+    payload = await task(payload, meta);
+  } catch (e) {
+    console.error(`Task #${taskIndex} failed at ${getDate()}`, {
+      payload,
+      meta
+    });
+    console.groupEnd();
+    throw e;
+  }
+  console.log(`Task #${taskIndex} end at ${getDate()}`, { payload, meta });
+  if (taskIndex === tasksCount - 1) console.groupEnd();
   return payload;
 };
 
-async function executor(name, tasks, errorHandler, initialPayload) {
-  const processId = Symbol();
-  const tasksCount = tasks.length - 1;
-  let taskIndex = 0;
-  // accumulate payload for case when taskIndex changed by throw
-  // and we need call previous Task with old payload
+const workingTasks = new WeakMap();
 
-  const payload = [initialPayload];
-  let loops = 0;
+export const rejectedByRaceCondition = new Error("rejected by race condition");
 
-  workingTasks.set(tasks, processId);
+export const preventRaceCondition = async (payload, meta, task) => {
+  const { tasks, taskIndex, processId } = meta;
+  if (taskIndex === 0) {
+    workingTasks.set(tasks, processId);
+  }
+  if (workingTasks.get(tasks) !== processId) {
+    throw rejectedByRaceCondition;
+  }
+  return await task(payload, meta);
+};
 
-  while (taskIndex <= tasksCount) {
-    try {
-      // escape race condition
-      if (workingTasks.get(tasks) !== processId) {
-        const error = new Error("rejected by race condition");
-        error.rejectedByRaceCondition = true;
-        throw error;
-      }
+/************
+ *** CORE ***
+ ************/
 
-      payload[taskIndex + 1] = await tasks[taskIndex](payload[taskIndex], {
-        state: this.state,
-        initialPayload,
-        name,
-        taskIndex,
-        tasksCount
-      });
+const executor = async ({
+  description,
+  tasks,
+  payload,
+  startIndex,
+  processId
+}) => {
+  const tasksCount = tasks.length;
 
-      taskIndex++;
-    } catch (error) {
-      const log = () => {
-        console.error(`Task #${taskIndex} FILED at ${getDate()}`, {
-          state: this.state,
-          initialPayload,
-          name,
-          taskIndex,
-          tasksCount
-        });
-        console.groupEnd();
-      };
+  for (let taskIndex = startIndex; taskIndex < tasksCount; taskIndex++) {
+    const meta = {
+      description,
+      tasks,
+      payload,
+      startIndex,
+      processId,
+      tasksCount,
+      taskIndex
+    };
 
-      if (error.rejectedByRaceCondition) {
-        log();
-        throw error;
-      }
-
-      const newTaskIndex = errorHandler(error, taskIndex);
-      if (newTaskIndex === undefined || newTaskIndex > tasksCount) {
-        log();
-        throw error;
-      }
-      if (newTaskIndex === taskIndex && this.maxLoop < ++loops) {
-        log();
-        throw new Error(`to many loops`);
-      }
-
-      // continue with renew taskIndex;
-      taskIndex = newTaskIndex;
-    }
+    payload = await tasks[taskIndex](payload, meta);
   }
 
-  // `- 1` because in end of while tick we do `taskIndex++;`
-  return payload[taskIndex - 1];
-}
+  return payload;
+};
 
-export class Coach extends React.Component {
-  decorators = [logger];
+const compose = (theMiddleware, task) => (payload, meta) =>
+  theMiddleware(payload, meta, task);
 
-  maxLoop = 5;
-
-  isRejectedByRaceCondition(error) {
-    return error.rejectedByRaceCondition;
+export class Coach {
+  constructor({ middleware = [logger, preventRaceCondition] } = {}) {
+    this.middleware = middleware;
   }
 
-  // wait state update for continue
-  async setWaitState(updater) {
-    return await new Promise(resolve =>
-      this.setState(updater, state => resolve(this.state))
-    );
-  }
-
-  goal(name, tasks = [], errorHandler = () => tasks.length) {
-    const decoratedTasks = tasks.map(task =>
-      this.decorators.reduceRight(
-        (acc, decorator) => compose(decorator, acc),
+  withMiddleware(middleware) {
+    return task =>
+      middleware.reduceRight(
+        (acc, theMiddleware) => compose(theMiddleware, acc),
         task
-      )
-    );
-    const newGoal = payload =>
-      executor.bind(this)(
-        name ? `"${name}"` : "",
-        decoratedTasks,
-        errorHandler,
-        payload
       );
+  }
 
-    newGoal.tasks = decoratedTasks;
+  goal(description, tasks = [payload => payload]) {
+    // description not specified
+    if (Array.isArray(description)) {
+      tasks = description;
+      description = "";
+    }
 
-    return newGoal;
+    tasks = tasks.map(this.withMiddleware(this.middleware));
+
+    return (payload, startIndex = 0) =>
+      executor({
+        description,
+        tasks,
+        payload,
+        startIndex,
+        processId: Symbol()
+      });
   }
 }
