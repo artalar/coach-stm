@@ -4,7 +4,7 @@ module.exports = {
       "@babel/env",
       {
         targets: {
-          browsers: ["ie 11"]
+          browsers: [process.env.BABEL_ENV === "commonjs" ? "ie 11" : "last 2 Chrome versions"]
         }
       }
     ]

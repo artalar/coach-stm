@@ -1,9 +1,9 @@
 {
   "name": "coach-stm",
-  "version": "2.0.0-alpha3",
+  "version": "2.0.0-alpha9",
   "description": "The Coach helps you achieve your goals, by simplifying your tasks",
-  "main": "lib/index.js",
-  "module": "es/index.js",
+  "main": "lib",
+  "module": "es",
   "scripts": {
     "prepublishOnly": "npm run rebuild:es && npm run rebuild:cjs",
     "postpublish": "npm run clean",
@@ -18,7 +18,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/artalar/coach-stm.git"
+    "url": "https://github.com/artalar/coach-stm.git"
   },
   "keywords": [
     "react",
@@ -36,7 +36,8 @@
   },
   "homepage": "https://github.com/artalar/coach-stm#readme",
   "dependencies": {
-    "@babel/runtime": "^7.0.0-beta.42"
+    "@babel/runtime": "^7.0.0-beta.42",
+    "kuker-emitters": "^6.7.3"
   },
   "devDependencies": {
     "@babel/cli": "^7.0.0-beta.42",
