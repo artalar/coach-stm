@@ -4,8 +4,7 @@ const emit = BaseEmitter();
 
 export const kukerEmitter = async (payload, meta, task) => {
   const { description, taskIndex, tasksCount } = meta;
-  let taskName = task._cStmTaskName || task.name;
-  taskName = taskName ? `"${taskName}" ` : '';
+  const taskName = `"${meta.taskName}" `;
   const goalName = description === undefined ? '' : `"${description}" `;
   if (taskIndex === 0) {
     emit({
