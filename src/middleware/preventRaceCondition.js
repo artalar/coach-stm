@@ -1,7 +1,9 @@
 const workingTasks = new Map();
 
 export class RejectedByRaceCondition extends Error {
-  message = 'rejected by race condition';
+  constructor() {
+    this.message = "rejected by race condition";
+  }
 }
 
 export const preventRaceCondition = async (payload, meta, task) => {
