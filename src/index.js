@@ -1,4 +1,4 @@
-const executor = async ({ description, tasks, instanceId, payload, processId }) => {
+const executor = async ({ description, tasks, tasksNames, instanceId, payload, processId }) => {
   const tasksCount = tasks.length;
 
   for (let taskIndex = 0; taskIndex < tasksCount; taskIndex++) {
@@ -8,6 +8,7 @@ const executor = async ({ description, tasks, instanceId, payload, processId }) 
       processId,
       tasksCount,
       taskIndex,
+      taskName: tasksNames[taskIndex],
     };
 
     payload = await tasks[taskIndex](payload, meta);
@@ -18,38 +19,64 @@ const executor = async ({ description, tasks, instanceId, payload, processId }) 
 
 const compose = (theMiddleware, task) => (payload, meta) => theMiddleware(payload, meta, task);
 
+const withMiddleware = middleware => task =>
+  Object.values(middleware).reduceRight((acc, theMiddleware) => compose(theMiddleware, acc), task);
+
+const createGoal = goalSettings => {
+  const { description, tasks, tasksNames, middleware } = goalSettings;
+  const tasksWithMiddleware = tasks.map(withMiddleware(middleware));
+
+  const instanceId = Symbol();
+
+  const goal = payload =>
+    executor({
+      description,
+      tasks: tasksWithMiddleware,
+      tasksNames,
+      instanceId,
+      payload,
+      processId: Symbol(),
+    });
+
+  goal.middleware = Object.freeze(middleware);
+  goal.replaceMiddleware = (middleware = {}) => createGoal({ ...goalSettings, middleware });
+
+  return goal;
+};
+
+export const indent = callback => async (payload, meta) => {
+  await callback(payload, meta);
+  return payload;
+};
+
 export class Coach {
-  constructor({ middleware = [] } = {}) {
-    this.middleware = middleware;
+  constructor({ middleware = {} } = {}) {
+    Object.defineProperty(this, 'middleware', {
+      value: Object.freeze(middleware),
+      configurable: false,
+      enumerable: false,
+      writable: false,
+    });
   }
 
-  withMiddleware(middleware) {
-    return task =>
-      middleware.reduceRight((acc, theMiddleware) => {
-        const f = compose(theMiddleware, acc);
-        f._cStmTaskName = task._cStmTaskName || task.name;
-        return f;
-      }, task);
-  }
-
-  goal(description, tasks = [payload => payload]) {
+  goal(description, tasks = { indent: indent }) {
     // description not specified
-    if (Array.isArray(description)) {
+    if (typeof description === 'object') {
       tasks = description;
       description = '';
     }
 
-    const instanceId = Symbol();
+    const tasksNames = [];
+    tasks = Object.keys(tasks).map(key => {
+      tasksNames.push(key);
+      return tasks[key];
+    });
 
-    tasks = tasks.map(this.withMiddleware(this.middleware));
-
-    return payload =>
-      executor({
-        description,
-        tasks,
-        instanceId,
-        payload,
-        processId: Symbol(),
-      });
+    return createGoal({
+      description,
+      tasks,
+      tasksNames,
+      middleware: this.middleware,
+    });
   }
 }
