@@ -31,7 +31,7 @@ const authUser = goal(
 import { Coach, indent } from "coach-stm";
 import middleware, { withMeta } from "coach-stm/middleware";
 
-import { STATUS } from 'reference';
+import { STATUS } from "reference";
 import { isEmail, isPassword } from "service/validator";
 import { Store } from "service/store";
 import * as api from "service/api";
@@ -84,20 +84,35 @@ export const authUser = coach.goal(
 
 ```javascript
 // workflow/auth.test.js
-import { withMeta } from 'coach-stm/middleware';
-import { authUser } from './auth';
+import { withMeta } from "coach-stm/middleware";
+import { authUser } from "./auth";
 
-describe('auth', () => {
-  const testData = { data: { permissions: ['test'] } };
+describe("auth", () => {
+  const testData = { data: { permissions: ["test"] } };
 
   const fetchGetMeMocked = () => new Promise(r => setTimeout(r, 5, testData));
 
   const getMeMocked = getMe.replaceMiddleware({
     ...getMe.middleware,
-    api: withMeta({ api: { getMe: fetchGetMeMocked } }),
+    api: withMeta({ api: { getMe: fetchGetMeMocked } })
   });
 
-  it('user authentication', async () =>
+  it("user authentication", async () =>
     expect(await getMeMocked()).toEqual(testData.data));
+});
+```
+
+### Детали
+
+> Каждый таск принимает вторым аргументом `meta`, которую могут менять только `middleware` - это и есть мощный, но безопасный функционал DI
+
+___
+
+> `middleware` не массивом, а объектом для того что бы их легко можно было заменить по ключу:
+
+```javascript
+someGoal.replaceMiddleware({
+  ...someGoal.middleware,
+  middlewareName: withMeta(anything)
 });
 ```
