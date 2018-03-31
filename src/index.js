@@ -1,17 +1,36 @@
-const executor = async ({ description, tasks, tasksNames, instanceId, payload, processId }) => {
+const executor = async ({
+  description,
+  tasks,
+  errorHandler,
+  tasksNames,
+  instanceId,
+  payload,
+  parentInstanceId,
+  processId,
+}) => {
   const tasksCount = tasks.length;
 
   for (let taskIndex = 0; taskIndex < tasksCount; taskIndex++) {
     const meta = {
       description,
       instanceId,
+      parentInstanceId,
       processId,
       tasksCount,
       taskIndex,
       taskName: tasksNames[taskIndex],
     };
 
-    payload = await tasks[taskIndex](payload, meta);
+    try {
+      const result = await tasks[taskIndex](payload, meta);
+      if (result instanceof Promise) {
+        payload = await result;
+      } else {
+        payload = result;
+      }
+    } catch (error) {
+      payload = errorHandler(error, meta);
+    }
   }
 
   return payload;
@@ -23,18 +42,20 @@ const withMiddleware = middleware => task =>
   Object.values(middleware).reduceRight((acc, theMiddleware) => compose(theMiddleware, acc), task);
 
 const createGoal = goalSettings => {
-  const { description, tasks, tasksNames, middleware } = goalSettings;
+  const { description, tasks, errorHandler, tasksNames, middleware } = goalSettings;
   const tasksWithMiddleware = tasks.map(withMiddleware(middleware));
 
   const instanceId = Symbol();
 
-  const goal = payload =>
+  const goal = (payload, { instanceId: parentInstanceId } = {}) =>
     executor({
       description,
       tasks: tasksWithMiddleware,
+      errorHandler,
       tasksNames,
       instanceId,
       payload,
+      parentInstanceId,
       processId: Symbol(),
     });
 
@@ -49,6 +70,10 @@ export const indent = callback => async (payload, meta) => {
   return payload;
 };
 
+const defaultErrorHandler = error => {
+  throw error;
+};
+
 export class Coach {
   constructor({ middleware = {} } = {}) {
     Object.defineProperty(this, 'middleware', {
@@ -59,12 +84,17 @@ export class Coach {
     });
   }
 
-  goal(description, tasks = { indent: indent }) {
-    // description not specified
-    if (typeof description === 'object') {
-      tasks = description;
-      description = '';
-    }
+  goal(...args) {
+    let description = '',
+      tasks = { indent: indent },
+      errorHandler = defaultErrorHandler;
+
+    args.forEach(argument => {
+      const type = typeof argument;
+      if (type === 'string') description = argument;
+      if (type === 'object') tasks = argument;
+      if (type === 'function') errorHandler = argument;
+    });
 
     const tasksNames = [];
     tasks = Object.keys(tasks).map(key => {
@@ -75,6 +105,7 @@ export class Coach {
     return createGoal({
       description,
       tasks,
+      errorHandler,
       tasksNames,
       middleware: this.middleware,
     });

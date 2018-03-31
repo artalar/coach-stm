@@ -2,7 +2,8 @@ const workingTasks = new Map();
 
 export class RejectedByRaceCondition extends Error {
   constructor() {
-    this.message = "rejected by race condition";
+    super();
+    this.message = 'rejected by race condition';
   }
 }
 
