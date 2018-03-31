@@ -1,8 +1,9 @@
+import { identity } from './identity';
 import { kukerEmitter } from './kukerEmitter';
-import { preventRaceCondition } from './preventRaceCondition';
 
-export default { kukerEmitter, preventRaceCondition };
+export default { identity, kukerEmitter };
 
-export { kukerEmitter, preventRaceCondition };
+export { identity, kukerEmitter };
 export { ifError } from './ifError';
+export { preventRaceCondition } from './preventRaceCondition';
 export { withMeta } from './withMeta';

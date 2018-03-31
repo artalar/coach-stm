@@ -65,7 +65,7 @@ const createGoal = goalSettings => {
   return goal;
 };
 
-export const indent = callback => async (payload, meta) => {
+export const identity = callback => async (payload, meta) => {
   await callback(payload, meta);
   return payload;
 };
@@ -86,7 +86,7 @@ export class Coach {
 
   goal(...args) {
     let description = '',
-      tasks = { indent: indent },
+      tasks = { identity: identity },
       errorHandler = defaultErrorHandler;
 
     args.forEach(argument => {

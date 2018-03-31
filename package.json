@@ -1,6 +1,6 @@
 {
   "name": "coach-stm",
-  "version": "2.0.0-beta2",
+  "version": "2.0.0-beta3",
   "description": "The Coach helps you achieve your goals, by simplifying your tasks",
   "main": "lib",
   "module": "es",
