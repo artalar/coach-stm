@@ -1,5 +1,10 @@
-export const identity = async (payload, meta, task) => {
+export const identity = (payload, meta, task) => {
   let result = task(payload, meta);
-  result = result instanceof Promise ? await result : result;
+  if (result instanceof Promise) return asyncIdentity(result, payload);
   return result === undefined ? payload : result;
 };
+
+const asyncIdentity = async (task, payload) => {
+  const result = await task;
+  return result === undefined ? payload : result;
+}

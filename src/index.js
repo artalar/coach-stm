@@ -1,16 +1,18 @@
-const executor = async ({
-  description,
-  tasks,
-  errorHandler,
-  tasksNames,
-  instanceId,
-  payload,
-  parentInstanceId,
-  processId,
-}) => {
+const executor = args => {
+  const {
+    description,
+    tasks,
+    errorHandler,
+    tasksNames,
+    instanceId,
+    parentInstanceId,
+    processId,
+  } = args;
+  let { payload, taskIndex } = args;
+
   const tasksCount = tasks.length;
 
-  for (let taskIndex = 0; taskIndex < tasksCount; taskIndex++) {
+  for (; taskIndex < tasksCount; taskIndex++) {
     const meta = {
       description,
       instanceId,
@@ -23,9 +25,68 @@ const executor = async ({
 
     try {
       const result = tasks[taskIndex](payload, meta);
-      payload = result instanceof Promise ? await result : result;
+      if (result instanceof Promise) {
+        return asyncExecutor(args, result);
+      } else {
+        payload = result;
+      }
+    } catch (error) {
+      errorHandler(error, meta);
+      throw error;
+    }
+  }
+
+  return payload;
+};
+
+const asyncExecutor = async (
+  {
+    description,
+    tasks,
+    errorHandler,
+    tasksNames,
+    instanceId,
+    payload,
+    parentInstanceId,
+    processId,
+    taskIndex,
+  },
+  task
+) => {
+  const tasksCount = tasks.length;
+
+  try {
+    payload = await task;
+    taskIndex++;
+  } catch (error) {
+    errorHandler(error, {
+      description,
+      instanceId,
+      parentInstanceId,
+      processId,
+      tasksCount,
+      taskIndex,
+      taskName: tasksNames[taskIndex],
+    });
+    throw error;
+  }
+
+  for (; taskIndex < tasksCount; taskIndex++) {
+    const meta = {
+      description,
+      instanceId,
+      parentInstanceId,
+      processId,
+      tasksCount,
+      taskIndex,
+      taskName: tasksNames[taskIndex],
+    };
+
+    try {
+      payload = await tasks[taskIndex](payload, meta);
     } catch (error) {
       payload = errorHandler(error, meta);
+      throw error;
     }
   }
 
@@ -56,6 +117,7 @@ const createGoal = goalSettings => {
       payload,
       parentInstanceId,
       processId: Symbol(),
+      taskIndex: 0,
     });
 
   goal.middleware = Object.freeze(middleware);
