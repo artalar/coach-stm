@@ -25,7 +25,8 @@ export const kukerEmitter = async (payload, meta, task) => {
     color: '#f3e3d9',
   });
   try {
-    payload = await task(payload, meta);
+    const result = task(payload, meta);
+    payload = result instanceof Promise ? await result : result;
   } catch (e) {
     emit({
       kuker: true,

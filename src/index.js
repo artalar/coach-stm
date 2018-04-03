@@ -22,12 +22,8 @@ const executor = async ({
     };
 
     try {
-      const result = await tasks[taskIndex](payload, meta);
-      if (result instanceof Promise) {
-        payload = await result;
-      } else {
-        payload = result;
-      }
+      const result = tasks[taskIndex](payload, meta);
+      payload = result instanceof Promise ? await result : result;
     } catch (error) {
       payload = errorHandler(error, meta);
     }
@@ -43,7 +39,10 @@ const withMiddleware = middleware => task =>
 
 const createGoal = goalSettings => {
   const { description, tasks, errorHandler, tasksNames, middleware } = goalSettings;
+
   const tasksWithMiddleware = tasks.map(withMiddleware(middleware));
+
+  const errorHandlerWithMiddleware = withMiddleware(middleware)(errorHandler);
 
   const instanceId = Symbol();
 
@@ -51,7 +50,7 @@ const createGoal = goalSettings => {
     executor({
       description,
       tasks: tasksWithMiddleware,
-      errorHandler,
+      errorHandler: errorHandlerWithMiddleware,
       tasksNames,
       instanceId,
       payload,
@@ -65,10 +64,7 @@ const createGoal = goalSettings => {
   return goal;
 };
 
-export const identity = callback => async (payload, meta) => {
-  await callback(payload, meta);
-  return payload;
-};
+const identity = p => p;
 
 const defaultErrorHandler = error => {
   throw error;
@@ -86,7 +82,7 @@ export class Coach {
 
   goal(...args) {
     let description = '',
-      tasks = { identity: identity },
+      tasks = { identity },
       errorHandler = defaultErrorHandler;
 
     args.forEach(argument => {

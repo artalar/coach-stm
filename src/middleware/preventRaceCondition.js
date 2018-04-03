@@ -15,5 +15,6 @@ export const preventRaceCondition = async (payload, meta, task) => {
   if (workingTasks.get(instanceId) !== processId) {
     throw new RejectedByRaceCondition();
   }
-  return await task(payload, meta);
+  const result = task(payload, meta);
+  return result instanceof Promise ? await result : result;
 };
